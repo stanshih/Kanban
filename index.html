@@ -5,306 +5,471 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>看板專案管理系統 (Kanban Project Management)</title>
     
-    <!-- 引入 Tailwind CSS 以快速建構現代化 UI -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- 引入 Google Fonts 的 Inter 字體 -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    
-    <!-- 引入 SortableJS 函式庫，這是實現拖曳功能的核心 -->
     <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
 
     <style>
-        /* 基本樣式設定 */
-        body {
-            font-family: 'Inter', sans-serif;
-            -ms-overflow-style: none; /* IE and Edge */
-            scrollbar-width: none; /* Firefox */
-        }
-        body::-webkit-scrollbar {
-            display: none; /* Chrome, Safari, and Opera */
-        }
-        
-        /* 拖曳時的 ghost 樣式 (半透明的預覽項目) */
-        .ghost-card {
-            opacity: 0.5;
-            background: #c8ebfb;
-            border: 1px dashed #333;
-        }
-        .ghost-list {
-            opacity: 0.5;
-            background: #d1d5db;
-        }
-
-        /* 讓看板容器可以水平滾動 */
-        #board-container {
-            -ms-overflow-style: none; /* IE and Edge */
-            scrollbar-width: none; /* Firefox */
-        }
-        #board-container::-webkit-scrollbar {
-            display: none; /* Chrome, Safari, and Opera */
-        }
+        body { font-family: 'Inter', sans-serif; -ms-overflow-style: none; scrollbar-width: none; }
+        body::-webkit-scrollbar, #board-container::-webkit-scrollbar { display: none; }
+        .ghost-card { opacity: 0.5; background: #c8ebfb; border: 1px dashed #333; }
+        .ghost-list { opacity: 0.5; background: #d1d5db; }
+        #board-container { -ms-overflow-style: none; scrollbar-width: none; }
+        .dropdown-menu { display: none; }
+        .dropdown-menu.show { display: block; }
+        .card .card-actions { opacity: 0; transition: opacity 0.2s ease-in-out; }
+        .card:hover .card-actions { opacity: 1; }
     </style>
 </head>
 <body class="bg-blue-600 h-screen overflow-hidden flex flex-col">
 
     <!-- 頂部導覽列 -->
     <header class="bg-blue-700/50 text-white p-4 flex justify-between items-center flex-shrink-0">
-        <h1 class="text-xl font-bold">看板專案管理系統</h1>
-        <!-- 未來可以放使用者頭像、篩選等功能 -->
-        <div>
+        <h1 id="board-title" class="text-xl font-bold">我的專案看板</h1>
+        <div class="flex items-center gap-4">
+            <div id="permission-ui" class="flex items-center gap-2">
+                 <span class="text-sm">您的角色: <span id="current-user-role" class="font-bold bg-white/20 px-2 py-1 rounded"></span></span>
+                 <button id="permission-btn" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-md font-semibold">權限設定</button>
+            </div>
             <button class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-md font-semibold">登入</button>
         </div>
     </header>
 
     <!-- 主看板區域 -->
     <main id="board-container" class="flex-grow overflow-x-auto overflow-y-hidden p-4 flex items-start gap-4">
-        <!-- 列表 (List) 將會動態插入到這裡 -->
-        
         <!-- 新增列表的按鈕 -->
-        <div class="flex-shrink-0">
+        <div id="add-list-wrapper" class="flex-shrink-0">
             <button id="add-list-btn" class="bg-white/20 hover:bg-white/30 text-white w-72 h-10 px-4 py-2 rounded-lg font-semibold flex items-center justify-start">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
-                </svg>
+                <svg class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" /></svg>
                 新增其他列表
             </button>
         </div>
     </main>
 
-    <!-- Modal 彈出視窗 (用於新增/編輯) -->
-    <div id="modal" class="fixed inset-0 bg-black/60 items-center justify-center hidden">
+    <!-- 通用 Modal 彈出視窗 (用於簡單輸入) -->
+    <div id="input-modal" class="fixed inset-0 bg-black/60 items-center justify-center hidden z-50">
         <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-            <h3 id="modal-title" class="text-xl font-bold mb-4">Modal Title</h3>
-            <input id="modal-input" type="text" class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500" placeholder="請輸入標題...">
+            <h3 id="input-modal-title" class="text-xl font-bold mb-4">Modal Title</h3>
+            <input id="input-modal-input" type="text" class="w-full border-gray-300 rounded-md shadow-sm" placeholder="請輸入標題...">
             <div class="mt-6 flex justify-end gap-3">
-                <button id="modal-cancel-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-md font-semibold">取消</button>
-                <button id="modal-save-btn" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md font-semibold">儲存</button>
+                <button data-action="cancel" class="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded-md">取消</button>
+                <button data-action="save" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md">儲存</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 卡片詳情 Modal -->
+    <div id="card-details-modal" class="fixed inset-0 bg-black/60 items-center justify-center hidden z-50">
+        <div class="bg-gray-100 rounded-lg shadow-xl w-full max-w-2xl">
+            <div class="p-6">
+                <input id="card-details-title" type="text" class="text-2xl font-bold w-full border-transparent focus:border-blue-500 focus:ring-blue-500 rounded-md bg-transparent p-1 -m-1">
+                <p class="text-sm text-gray-500 mt-1">在列表 <span id="card-details-list-name" class="font-semibold"></span> 中</p>
+            </div>
+            <div class="p-6 bg-white">
+                <h4 class="font-bold text-lg">描述</h4>
+                <textarea id="card-details-desc" class="w-full mt-2 border-gray-300 rounded-md shadow-sm" rows="4" placeholder="新增更詳細的描述..."></textarea>
+            </div>
+            <div class="p-6 flex justify-end gap-3 bg-gray-100 rounded-b-lg">
+                <button data-action="close" class="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded-md">關閉</button>
+                <button data-action="save" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md">儲存變更</button>
             </div>
         </div>
     </div>
 
+    <!-- 權限管理 Modal -->
+    <div id="permission-modal" class="fixed inset-0 bg-black/60 items-center justify-center hidden z-50">
+        <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg">
+            <h3 class="text-xl font-bold mb-4">管理成員與權限</h3>
+            <div id="permission-list" class="space-y-3 mb-4">
+                <!-- 成員列表會動態插入這裡 -->
+            </div>
+            <div class="border-t pt-4">
+                <h4 class="font-semibold mb-2">邀請新成員</h4>
+                <div class="flex gap-2">
+                    <input id="invite-email-input" type="email" class="flex-grow border-gray-300 rounded-md" placeholder="輸入成員 Email">
+                    <select id="invite-role-select" class="border-gray-300 rounded-md">
+                        <option value="Editor">編輯者</option>
+                        <option value="Viewer">檢視者</option>
+                    </select>
+                    <button id="invite-btn" class="bg-blue-600 text-white px-4 py-2 rounded-md">邀請</button>
+                </div>
+            </div>
+            <div class="mt-6 flex justify-end">
+                <button data-action="close" class="bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded-md">完成</button>
+            </div>
+        </div>
+    </div>
 
     <script>
-        // --- 應用程式狀態管理 (State Management) ---
-        // 在真實應用中，這些資料會來自後端 API
+        // --- 模擬資料與狀態管理 ---
+        const ROLES = {
+            OWNER: '擁有者',
+            ADMIN: '管理者',
+            EDITOR: '編輯者',
+            VIEWER: '檢視者'
+        };
+
+        const PERMISSIONS = {
+            [ROLES.OWNER]: ['all'],
+            [ROLES.ADMIN]: ['manage_members', 'edit_board', 'manage_content'],
+            [ROLES.EDITOR]: ['manage_content'],
+            [ROLES.VIEWER]: []
+        };
+        
+        let currentUser = { id: 1, name: '您', role: ROLES.ADMIN };
+
         let boardState = {
+            id: 'board-1',
+            title: '我的專案看板',
+            members: [
+                { id: 1, name: '您', email: 'user@example.com', role: ROLES.ADMIN },
+                { id: 2, name: '陳經理', email: 'manager.chen@example.com', role: ROLES.OWNER },
+                { id: 3, name: '設計師小王', email: 'wang.design@example.com', role: ROLES.EDITOR },
+                { id: 4, name: '實習生小李', email: 'li.intern@example.com', role: ROLES.VIEWER },
+            ],
             lists: [
-                {
-                    id: 'list-1',
-                    title: '待辦事項 (To-Do)',
-                    cards: [
-                        { id: 'card-1', title: '設計使用者登入頁面' },
-                        { id: 'card-2', title: '規劃資料庫 Schema' },
-                        { id: 'card-3', title: '研究權限控管 (RBAC) 實作方式' },
-                    ]
-                },
-                {
-                    id: 'list-2',
-                    title: '進行中 (In Progress)',
-                    cards: [
-                        { id: 'card-4', title: '開發前端拖曳功能原型' }
-                    ]
-                },
-                {
-                    id: 'list-3',
-                    title: '已完成 (Done)',
-                    cards: [
-                        { id: 'card-5', title: '完成專案架構設計文件' }
-                    ]
-                }
+                { id: 'list-1', title: '待辦事項', cards: [{ id: 'card-1', title: '設計登入頁面', description: '' }] },
+                { id: 'list-2', title: '進行中', cards: [{ id: 'card-2', title: '開發前端原型', description: '需要包含拖曳功能' }] },
+                { id: 'list-3', title: '已完成', cards: [{ id: 'card-3', title: '完成架構設計', description: '已歸檔' }] }
             ]
         };
 
         // --- DOM 元素選擇器 ---
         const boardContainer = document.getElementById('board-container');
-        const addListBtn = document.getElementById('add-list-btn');
-        const modal = document.getElementById('modal');
-        const modalTitle = document.getElementById('modal-title');
-        const modalInput = document.getElementById('modal-input');
-        const modalCancelBtn = document.getElementById('modal-cancel-btn');
-        const modalSaveBtn = document.getElementById('modal-save-btn');
+        const modals = {
+            input: { el: document.getElementById('input-modal'), title: document.getElementById('input-modal-title'), input: document.getElementById('input-modal-input') },
+            cardDetails: { el: document.getElementById('card-details-modal'), title: document.getElementById('card-details-title'), listName: document.getElementById('card-details-list-name'), desc: document.getElementById('card-details-desc') },
+            permission: { el: document.getElementById('permission-modal'), list: document.getElementById('permission-list') }
+        };
 
-        let currentModalAction = null; // 用來儲存當前 modal 的操作 (e.g., addList, addCard)
+        let currentAction = null; // 儲存當前操作，例如 { type: 'editList', listId: 'list-1' }
+        let sortableInstances = [];
+
+        // --- 權限檢查函式 ---
+        function hasPermission(action) {
+            const userRole = currentUser.role;
+            if (!userRole || !PERMISSIONS[userRole]) return false;
+            const userPermissions = PERMISSIONS[userRole];
+            if (userPermissions.includes('all')) return true;
+            
+            switch(action) {
+                case 'manage_members':
+                    return userPermissions.includes('manage_members');
+                case 'manage_content':
+                    return userPermissions.includes('manage_content');
+                case 'drag_drop':
+                    return userPermissions.includes('manage_content');
+                default:
+                    return false;
+            }
+        }
 
         // --- 核心渲染函式 ---
         function renderBoard() {
-            // 清空現有看板內容 (除了新增列表按鈕)
-            const listsToRemove = boardContainer.querySelectorAll('.list-wrapper');
-            listsToRemove.forEach(list => list.remove());
+            document.getElementById('board-title').textContent = boardState.title;
+            document.getElementById('current-user-role').textContent = currentUser.role;
 
-            boardState.lists.forEach((list, listIndex) => {
-                // 創建列表的容器
+            // 清空現有列表
+            boardContainer.querySelectorAll('.list-wrapper').forEach(el => el.remove());
+
+            boardState.lists.forEach(list => {
                 const listWrapper = document.createElement('div');
                 listWrapper.className = 'list-wrapper flex-shrink-0 w-72';
                 listWrapper.setAttribute('data-list-id', list.id);
 
                 const listElement = document.createElement('div');
-                listElement.className = 'list bg-gray-200 rounded-lg p-2 shadow-md';
+                listElement.className = 'list bg-gray-200 rounded-lg p-2 shadow-md flex flex-col';
                 
-                // 列表標題
-                const listHeader = document.createElement('h2');
-                listHeader.className = 'font-bold p-2 text-gray-800';
-                listHeader.textContent = list.title;
+                // 列表標題與選單
+                const listHeader = document.createElement('div');
+                listHeader.className = 'flex justify-between items-center p-2';
+                listHeader.innerHTML = `
+                    <h2 class="font-bold text-gray-800">${list.title}</h2>
+                    ${hasPermission('manage_content') ? `
+                    <div class="relative">
+                        <button data-action="toggle-list-menu" class="text-gray-500 hover:bg-gray-300 p-1 rounded-full">
+                            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M10 6a2 2 0 110-4 2 2 0 010 4zM10 12a2 2 0 110-4 2 2 0 010 4zM10 18a2 2 0 110-4 2 2 0 010 4z"></path></svg>
+                        </button>
+                        <div class="dropdown-menu absolute right-0 mt-2 w-48 bg-white rounded-md shadow-xl z-20 py-1">
+                            <a href="#" data-action="edit-list" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">編輯列表標題</a>
+                            <a href="#" data-action="delete-list" class="block px-4 py-2 text-sm text-red-600 hover:bg-red-50">刪除此列表</a>
+                        </div>
+                    </div>` : ''}
+                `;
                 listElement.appendChild(listHeader);
 
                 // 卡片容器
                 const cardsContainer = document.createElement('div');
-                cardsContainer.className = 'cards-container space-y-2 p-1 min-h-[40px]';
+                cardsContainer.className = 'cards-container space-y-2 p-1 min-h-[40px] flex-grow';
                 cardsContainer.setAttribute('data-list-id', list.id);
 
-                // 渲染卡片
-                list.cards.forEach((card, cardIndex) => {
+                list.cards.forEach(card => {
                     const cardElement = document.createElement('div');
                     cardElement.className = 'card bg-white rounded-md p-3 shadow cursor-pointer hover:bg-gray-50';
-                    cardElement.textContent = card.title;
                     cardElement.setAttribute('data-card-id', card.id);
+                    cardElement.innerHTML = `
+                        <span>${card.title}</span>
+                        ${hasPermission('manage_content') ? `
+                        <div class="card-actions absolute top-1 right-1 flex gap-1">
+                            <button data-action="edit-card" class="bg-gray-200 hover:bg-gray-300 rounded p-1">
+                               <svg class="w-3 h-3 text-gray-600" fill="currentColor" viewBox="0 0 20 20"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z"></path><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd"></path></svg>
+                            </button>
+                        </div>` : ''}
+                    `;
                     cardsContainer.appendChild(cardElement);
                 });
-
                 listElement.appendChild(cardsContainer);
 
                 // 新增卡片按鈕
-                const addCardBtn = document.createElement('button');
-                addCardBtn.className = 'add-card-btn text-gray-500 hover:bg-gray-300 w-full text-left p-2 rounded-md mt-2';
-                addCardBtn.innerHTML = `
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 inline mr-1" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
-                    </svg>
-                    新增卡片
-                `;
-                addCardBtn.addEventListener('click', () => {
-                    openModal('addCard', { listId: list.id });
-                });
-                listElement.appendChild(addCardBtn);
+                if (hasPermission('manage_content')) {
+                    const addCardBtn = document.createElement('button');
+                    addCardBtn.className = 'add-card-btn text-gray-500 hover:bg-gray-300 w-full text-left p-2 rounded-md mt-2';
+                    addCardBtn.innerHTML = `<svg class="h-5 w-5 inline mr-1" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" /></svg>新增卡片`;
+                    addCardBtn.setAttribute('data-action', 'add-card');
+                    listElement.appendChild(addCardBtn);
+                }
 
                 listWrapper.appendChild(listElement);
-                // 將新的列表插入到 "新增列表" 按鈕之前
-                boardContainer.insertBefore(listWrapper, addListBtn.parentElement);
+                boardContainer.insertBefore(listWrapper, document.getElementById('add-list-wrapper'));
             });
+            
+            // 根據權限決定是否顯示新增列表按鈕
+            document.getElementById('add-list-btn').style.display = hasPermission('manage_content') ? 'flex' : 'none';
+            document.getElementById('permission-btn').style.display = hasPermission('manage_members') ? 'block' : 'none';
 
-            // 初始化拖曳功能
             initializeSortable();
         }
 
-        // --- 拖曳功能初始化 (核心) ---
+        // --- 拖曳功能初始化 ---
         function initializeSortable() {
-            // 讓列表可以左右拖曳排序
-            new Sortable(boardContainer, {
+            sortableInstances.forEach(s => s.destroy());
+            sortableInstances = [];
+
+            const canDrag = hasPermission('drag_drop');
+
+            const listSortable = new Sortable(boardContainer, {
                 animation: 150,
-                handle: '.list', // 只能透過列表本身拖曳，而不是整個 wrapper
+                handle: '.list',
                 ghostClass: 'ghost-list',
+                sort: canDrag,
                 onEnd: (evt) => {
                     const movedList = boardState.lists.splice(evt.oldIndex, 1)[0];
                     boardState.lists.splice(evt.newIndex, 0, movedList);
-                    // 在真實應用中，這裡會發送 API 更新後端數據
-                    console.log('列表順序已更新:', boardState.lists);
                 }
             });
+            sortableInstances.push(listSortable);
 
-            // 讓卡片可以在列表內及列表間拖曳
-            const cardContainers = document.querySelectorAll('.cards-container');
-            cardContainers.forEach(container => {
-                new Sortable(container, {
-                    group: 'cards', // 關鍵設定：讓不同列表的卡片可以互通
+            boardContainer.querySelectorAll('.cards-container').forEach(container => {
+                const cardSortable = new Sortable(container, {
+                    group: 'cards',
                     animation: 150,
                     ghostClass: 'ghost-card',
+                    sort: canDrag,
                     onEnd: (evt) => {
                         const cardId = evt.item.dataset.cardId;
                         const fromListId = evt.from.dataset.listId;
                         const toListId = evt.to.dataset.listId;
-                        
                         const fromList = boardState.lists.find(l => l.id === fromListId);
                         const toList = boardState.lists.find(l => l.id === toListId);
-
-                        // 找到被移動的卡片
                         const movedCard = fromList.cards.splice(evt.oldIndex, 1)[0];
-                        // 將卡片插入到新的列表
                         toList.cards.splice(evt.newIndex, 0, movedCard);
-
-                        // 在真實應用中，這裡會發送 API 更新後端數據
-                        console.log(`卡片 ${cardId} 從 ${fromListId} 移動到 ${toListId}`);
-                        console.log('看板狀態已更新:', boardState);
                     }
                 });
+                sortableInstances.push(cardSortable);
             });
         }
-
-        // --- Modal 相關函式 ---
-        function openModal(action, context = {}) {
-            currentModalAction = { action, context };
-            modalInput.value = '';
-            if (action === 'addList') {
-                modalTitle.textContent = '新增列表';
-                modalInput.placeholder = '請輸入列表標題...';
-            } else if (action === 'addCard') {
-                modalTitle.textContent = '新增卡片';
-                modalInput.placeholder = '請輸入卡片標題...';
+        
+        // --- Modal 邏輯 ---
+        function openModal(modalName, actionContext) {
+            currentAction = actionContext;
+            const modal = modals[modalName];
+            if (!modal) return;
+            
+            if (modalName === 'input') {
+                const { type, listId, cardId } = currentAction;
+                if (type === 'addList') {
+                    modal.title.textContent = '新增列表';
+                    modal.input.value = '';
+                    modal.input.placeholder = '請輸入列表標題...';
+                } else if (type === 'addCard') {
+                    modal.title.textContent = '新增卡片';
+                    modal.input.value = '';
+                    modal.input.placeholder = '請輸入卡片標題...';
+                } else if (type === 'editList') {
+                    const list = boardState.lists.find(l => l.id === listId);
+                    modal.title.textContent = '編輯列表標題';
+                    modal.input.value = list.title;
+                }
+            } else if (modalName === 'cardDetails') {
+                const { listId, cardId } = currentAction;
+                const list = boardState.lists.find(l => l.id === listId);
+                const card = list.cards.find(c => c.id === cardId);
+                modal.title.value = card.title;
+                modal.desc.value = card.description;
+                modal.listName.textContent = list.title;
+            } else if (modalName === 'permission') {
+                renderPermissionList();
             }
-            modal.classList.remove('hidden');
-            modal.classList.add('flex');
-            modalInput.focus();
+
+            modal.el.classList.remove('hidden');
+            modal.el.classList.add('flex');
+            if (modal.input) modal.input.focus();
         }
 
-        function closeModal() {
-            modal.classList.add('hidden');
-            modal.classList.remove('flex');
-            currentModalAction = null;
+        function closeModal(modalName) {
+            modals[modalName].el.classList.add('hidden');
+            modals[modalName].el.classList.remove('flex');
+            currentAction = null;
         }
 
-        // --- 事件處理 (Event Handlers) ---
-        addListBtn.addEventListener('click', () => {
-            openModal('addList');
-        });
+        function renderPermissionList() {
+            modals.permission.list.innerHTML = '';
+            boardState.members.forEach(member => {
+                const memberEl = document.createElement('div');
+                memberEl.className = 'flex justify-between items-center';
+                const isOwner = member.role === ROLES.OWNER;
+                memberEl.innerHTML = `
+                    <div>
+                        <p class="font-semibold">${member.name} ${member.id === currentUser.id ? '(您)' : ''}</p>
+                        <p class="text-sm text-gray-500">${member.email}</p>
+                    </div>
+                    <div>
+                        ${isOwner ? `<span class="px-2 py-1 text-sm bg-yellow-200 text-yellow-800 rounded-full">${ROLES.OWNER}</span>` : `
+                        <select data-member-id="${member.id}" class="border-gray-300 rounded-md">
+                            <option value="${ROLES.ADMIN}" ${member.role === ROLES.ADMIN ? 'selected' : ''}>管理者</option>
+                            <option value="${ROLES.EDITOR}" ${member.role === ROLES.EDITOR ? 'selected' : ''}>編輯者</option>
+                            <option value="${ROLES.VIEWER}" ${member.role === ROLES.VIEWER ? 'selected' : ''}>檢視者</option>
+                        </select>
+                        <button data-action="remove-member" data-member-id="${member.id}" class="ml-2 text-red-500 hover:text-red-700">&times; 移除</button>
+                        `}
+                    </div>
+                `;
+                modals.permission.list.appendChild(memberEl);
+            });
+        }
+        
+        // --- 事件監聽與處理 ---
+        document.addEventListener('click', (e) => {
+            const action = e.target.dataset.action || e.target.closest('[data-action]')?.dataset.action;
+            if (!action) {
+                // 點擊空白處關閉列表選單
+                document.querySelectorAll('.dropdown-menu.show').forEach(menu => menu.classList.remove('show'));
+                return;
+            }
 
-        modalCancelBtn.addEventListener('click', closeModal);
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                closeModal();
+            const target = e.target.closest('[data-action]');
+            const listWrapper = e.target.closest('.list-wrapper');
+            const cardElement = e.target.closest('.card');
+            
+            const listId = listWrapper?.dataset.listId;
+            const cardId = cardElement?.dataset.cardId;
+            
+            switch (action) {
+                case 'add-list-btn':
+                    openModal('input', { type: 'addList' });
+                    break;
+                case 'add-card':
+                    openModal('input', { type: 'addCard', listId });
+                    break;
+                case 'toggle-list-menu':
+                    e.stopPropagation();
+                    const menu = target.nextElementSibling;
+                    const isShown = menu.classList.contains('show');
+                    document.querySelectorAll('.dropdown-menu.show').forEach(m => m.classList.remove('show'));
+                    if (!isShown) menu.classList.add('show');
+                    break;
+                case 'edit-list':
+                    openModal('input', { type: 'editList', listId });
+                    break;
+                case 'delete-list':
+                    if (confirm(`確定要刪除列表 "${boardState.lists.find(l=>l.id===listId).title}" 嗎？`)) {
+                        boardState.lists = boardState.lists.filter(l => l.id !== listId);
+                        renderBoard();
+                    }
+                    break;
+                case 'edit-card': // For the pencil icon
+                    openModal('cardDetails', { listId, cardId });
+                    break;
+                case 'open-card-details': // For clicking the card body
+                    if(!e.target.closest('.card-actions')) { // Avoid opening if clicking on action buttons
+                       openModal('cardDetails', { listId, cardId });
+                    }
+                    break;
+                case 'permission-btn':
+                    openModal('permission');
+                    break;
             }
         });
         
-        modalInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                modalSaveBtn.click();
+        // Card click listener
+        boardContainer.addEventListener('click', function(e) {
+            const card = e.target.closest('.card');
+            if (card && !e.target.closest('[data-action]')) {
+                const cardId = card.dataset.cardId;
+                const listId = card.closest('.cards-container').dataset.listId;
+                openModal('cardDetails', { listId, cardId });
             }
         });
 
-        modalSaveBtn.addEventListener('click', () => {
-            const title = modalInput.value.trim();
+
+        // Modal event delegation
+        document.querySelectorAll('.fixed.inset-0').forEach(modalEl => {
+            modalEl.addEventListener('click', e => {
+                const action = e.target.dataset.action || e.target.closest('[data-action]')?.dataset.action;
+                if (e.target === modalEl || action === 'cancel' || action === 'close') {
+                    closeModal(modalEl.id.split('-')[0]);
+                }
+                if (action === 'save') {
+                    if (modalEl.id === 'input-modal') handleSaveInputModal();
+                    if (modalEl.id === 'card-details-modal') handleSaveCardDetailsModal();
+                }
+            });
+        });
+
+        document.getElementById('permission-modal').addEventListener('change', e => {
+            if (e.target.tagName === 'SELECT') {
+                const memberId = e.target.dataset.memberId;
+                const newRole = e.target.value;
+                const member = boardState.members.find(m => m.id == memberId);
+                if (member) member.role = newRole;
+                if (member.id === currentUser.id) currentUser.role = newRole;
+                renderBoard(); // Re-render to reflect permission changes
+            }
+        });
+
+        // --- 處理函式 ---
+        function handleSaveInputModal() {
+            const { type, listId } = currentAction;
+            const title = modals.input.input.value.trim();
             if (!title) return;
 
-            const { action, context } = currentModalAction;
-
-            if (action === 'addList') {
-                const newList = {
-                    id: `list-${Date.now()}`,
-                    title: title,
-                    cards: []
-                };
-                boardState.lists.push(newList);
-            } else if (action === 'addCard') {
-                const list = boardState.lists.find(l => l.id === context.listId);
-                if (list) {
-                    const newCard = {
-                        id: `card-${Date.now()}`,
-                        title: title
-                    };
-                    list.cards.push(newCard);
-                }
+            if (type === 'addList') {
+                boardState.lists.push({ id: `list-${Date.now()}`, title, cards: [] });
+            } else if (type === 'addCard') {
+                const list = boardState.lists.find(l => l.id === listId);
+                list.cards.push({ id: `card-${Date.now()}`, title, description: '' });
+            } else if (type === 'editList') {
+                const list = boardState.lists.find(l => l.id === listId);
+                list.title = title;
             }
-
-            closeModal();
+            closeModal('input');
             renderBoard();
-        });
-
-        // --- 應用程式初始化 ---
-        document.addEventListener('DOMContentLoaded', () => {
+        }
+        
+        function handleSaveCardDetailsModal() {
+            const { listId, cardId } = currentAction;
+            const list = boardState.lists.find(l => l.id === listId);
+            const card = list.cards.find(c => c.id === cardId);
+            card.title = modals.cardDetails.title.value.trim();
+            card.description = modals.cardDetails.desc.value.trim();
+            closeModal('cardDetails');
             renderBoard();
-        });
+        }
 
+        // --- 初始化 ---
+        document.addEventListener('DOMContentLoaded', renderBoard);
     </script>
 </body>
 </html>
